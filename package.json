@@ -1,0 +1,21 @@
+{
+  "name": "campus-connect",
+  "version": "1.0.0",
+  "description": "CampusConnect: AI-Powered Campus Maintenance Complaint Triage & Actionable Ticket System (Powered by Google Gemini)",
+  "scripts": {
+    "start": "node backend/server.js",
+    "build": "npm run build --prefix frontend",
+    "dev:backend": "node backend/server.js",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "test": "node -e \"fetch('http://localhost:5000/api/health').then(r => r.json()).then(console.log)\""
+  },
+  "keywords": [
+    "campus-connect",
+    "gemini-ai",
+    "maintenance-tickets",
+    "multimodal-triage",
+    "hindi-nlp"
+  ],
+  "author": "CampusConnect Team",
+  "license": "ISC"
+}
