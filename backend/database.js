@@ -1,5 +1,6 @@
 // campus-connect/backend/database.js
 const Database = require('better-sqlite3');
+const bcrypt = require('bcryptjs');
 const path = require('path');
 const { SAMPLE_EVIDENCE_PHOTOS } = require('./routingGuide');
 
@@ -9,6 +10,17 @@ db.pragma('journal_mode = WAL');
 
 function initDatabase() {
   db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'student',
+      roll_number TEXT,
+      department TEXT,
+      created_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS tickets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       ticket_number TEXT UNIQUE NOT NULL,
@@ -46,10 +58,61 @@ function initDatabase() {
     );
   `);
 
+  const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get();
+  if (userCount.count === 0) {
+    seedInitialUsers();
+  }
+
   const countRow = db.prepare('SELECT COUNT(*) as count FROM tickets').get();
   if (countRow.count === 0) {
     seedInitialTickets();
   }
+}
+
+function seedInitialUsers() {
+  const now = new Date().toISOString();
+  const studentHash = bcrypt.hashSync('student123', 10);
+  const adminHash = bcrypt.hashSync('admin123', 10);
+
+  const insertUser = db.prepare(`
+    INSERT INTO users (name, email, password_hash, role, roll_number, department, created_at)
+    VALUES (@name, @email, @password_hash, @role, @roll_number, @department, @created_at)
+  `);
+
+  const defaultUsers = [
+    {
+      name: 'Aarav Sharma',
+      email: 'student@equinox.edu',
+      password_hash: studentHash,
+      role: 'student',
+      roll_number: 'EIT2024CS108',
+      department: 'B.Tech Computer Science (Hostel Block B)',
+      created_at: now
+    },
+    {
+      name: 'Priyanshu Verma',
+      email: 'priyanshu@equinox.edu',
+      password_hash: studentHash,
+      role: 'student',
+      roll_number: 'EIT2024ME054',
+      department: 'B.Tech Mechanical Engineering (Hostel Block B)',
+      created_at: now
+    },
+    {
+      name: 'Er. Rajesh Sharma',
+      email: 'admin@equinox.edu',
+      password_hash: adminHash,
+      role: 'admin',
+      roll_number: 'STAFF-ADMIN-01',
+      department: 'Campus Facilities & Maintenance Control Center',
+      created_at: now
+    }
+  ];
+
+  const tx = db.transaction((rows) => {
+    for (const row of rows) insertUser.run(row);
+  });
+  tx(defaultUsers);
 }
 
 function seedInitialTickets() {
@@ -61,7 +124,7 @@ function seedInitialTickets() {
       ticket_number: 'CC-2026-1041',
       student_name: 'Aarav Sharma',
       student_roll: 'EIT2024CS108',
-      student_email: 'aarav.sharma@equinox.edu',
+      student_email: 'student@equinox.edu',
       original_complaint: 'Water is spraying out from the pipe under the middle washbasin in Hostel B 2nd floor washroom. Floor is completely flooded.',
       detected_language: 'English',
       english_translation: null,
@@ -127,7 +190,7 @@ function seedInitialTickets() {
       ticket_number: 'CC-2026-1042',
       student_name: 'Priyanshu Verma',
       student_roll: 'EIT2024ME054',
-      student_email: 'priyanshu.v@equinox.edu',
+      student_email: 'priyanshu@equinox.edu',
       original_complaint: 'हॉस्टल बी के दूसरे फ्लोर के वॉशरूम में बेसिन के नीचे पाइप टूट गया है और पूरे फर्श पर पानी भर रहा है, जल्दी किसी को भेजो!',
       detected_language: 'Hindi (हिंदी)',
       english_translation: 'In Hostel B 2nd floor washroom, the pipe beneath the washbasin has broken and water is flooding the entire floor, please send someone urgently!',
@@ -491,5 +554,6 @@ function seedInitialTickets() {
 module.exports = {
   db,
   initDatabase,
-  seedInitialTickets
+  seedInitialTickets,
+  seedInitialUsers
 };

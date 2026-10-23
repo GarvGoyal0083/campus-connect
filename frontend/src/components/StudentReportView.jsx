@@ -57,6 +57,8 @@ const PHOTO_PRESETS = [
 ];
 
 export default function StudentReportView({
+  currentUser,
+  onOpenStudentLogin,
   campus,
   samplePhotos,
   onTicketCreated,
@@ -64,8 +66,8 @@ export default function StudentReportView({
   externalDraft,
   clearExternalDraft
 }) {
-  const [studentName, setStudentName] = useState('Aarav Sharma');
-  const [studentRoll, setStudentRoll] = useState('EIT2024CS108');
+  const [studentName, setStudentName] = useState(currentUser?.name || 'Aarav Sharma');
+  const [studentRoll, setStudentRoll] = useState(currentUser?.roll_number || 'EIT2024CS108');
   const [complaintText, setComplaintText] = useState('');
   const [building, setBuilding] = useState('');
   const [specificLocation, setSpecificLocation] = useState('');
@@ -77,6 +79,13 @@ export default function StudentReportView({
   const [submitting, setSubmitting] = useState(false);
   const [analysis, setAnalysis] = useState(null);
   const [error, setError] = useState('');
+
+  React.useEffect(() => {
+    if (currentUser) {
+      setStudentName(currentUser.name || 'Aarav Sharma');
+      setStudentRoll(currentUser.roll_number || 'EIT2024CS108');
+    }
+  }, [currentUser]);
 
   React.useEffect(() => {
     if (externalDraft) {

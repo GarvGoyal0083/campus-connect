@@ -2,6 +2,8 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 const path = require('path');
 const fs = require('fs');
 const { db, initDatabase, seedInitialTickets } = require('./database');
@@ -10,12 +12,88 @@ const { analyzeComplaintWithGemini } = require('./geminiService');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const JWT_SECRET = process.env.JWT_SECRET || 'campus_connect_jwt_secret_2026';
 
 app.use(cors());
 app.use(express.json({ limit: '15mb' }));
 
 // Initialize SQLite database & seed data
 initDatabase();
+
+function sanitizeUser(u) {
+  if (!u) return null;
+  const { password_hash, ...safe } = u;
+  return safe;
+}
+
+// ---------------- AUTHENTICATION (STUDENT & ADMIN LOGIN) ---------------- //
+app.post('/api/auth/login', (req, res) => {
+  try {
+    const { email = '', password = '' } = req.body;
+    const row = db.prepare('SELECT * FROM users WHERE LOWER(email) = LOWER(?)').get(email.trim());
+    if (!row || !bcrypt.compareSync(password, row.password_hash)) {
+      return res.status(401).json({ error: 'Invalid email or password.' });
+    }
+    const user = sanitizeUser(row);
+    const token = jwt.sign({ id: user.id, role: user.role, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+    res.json({ token, user });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/auth/register', (req, res) => {
+  try {
+    const {
+      name = '',
+      email = '',
+      password = '',
+      role = 'student',
+      roll_number = '',
+      department = 'Equinox Main Campus'
+    } = req.body;
+
+    if (!name.trim() || !email.trim() || !password.trim()) {
+      return res.status(400).json({ error: 'Name, email, and password are required.' });
+    }
+
+    const exists = db.prepare('SELECT id FROM users WHERE LOWER(email) = LOWER(?)').get(email.trim());
+    if (exists) {
+      return res.status(400).json({ error: 'An account with this email already exists.' });
+    }
+
+    const hash = bcrypt.hashSync(password, 10);
+    const now = new Date().toISOString();
+    const validRole = role === 'admin' ? 'admin' : 'student';
+    const finalRoll = roll_number.trim() || (validRole === 'admin' ? 'STAFF-ADMIN' : `EIT2026ST${Math.floor(100 + Math.random() * 900)}`);
+
+    const info = db.prepare(`
+      INSERT INTO users (name, email, password_hash, role, roll_number, department, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(name.trim(), email.trim().toLowerCase(), hash, validRole, finalRoll, department, now);
+
+    const user = sanitizeUser(db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid));
+    const token = jwt.sign({ id: user.id, role: user.role, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+    res.status(201).json({ token, user });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/auth/me', (req, res) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (!token) return res.status(401).json({ error: 'No token provided' });
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const row = db.prepare('SELECT * FROM users WHERE id = ?').get(decoded.id);
+    if (!row) return res.status(404).json({ error: 'User not found' });
+    res.json({ user: sanitizeUser(row) });
+  } catch (err) {
+    res.status(401).json({ error: 'Invalid or expired token' });
+  }
+});
 
 function parseTicket(row) {
   if (!row) return null;
