@@ -814,9 +814,37 @@ app.get('/api/health', (req, res) => {
 // Serve static frontend build in production
 const distPath = path.join(__dirname, '../frontend/dist');
 if (fs.existsSync(distPath)) {
-  app.use(express.static(distPath));
+  app.use(
+    express.static(distPath, {
+      etag: false,
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.html')) {
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        }
+      }
+    })
+  );
+
+  // Fallback for stale cached asset hashes (/assets/index-*.js or .css) so cached tabs never white-screen
+  app.get('/assets/:filename', (req, res, next) => {
+    const assetsDir = path.join(distPath, 'assets');
+    if (!fs.existsSync(assetsDir)) return next();
+    const reqFile = req.params.filename || '';
+    const ext = path.extname(reqFile);
+    if (ext === '.js' || ext === '.css') {
+      const files = fs.readdirSync(assetsDir);
+      const match = files.find(f => f.endsWith(ext));
+      if (match) {
+        res.setHeader('Cache-Control', 'no-cache');
+        return res.sendFile(path.join(assetsDir, match));
+      }
+    }
+    return res.status(404).end();
+  });
+
   app.use((req, res, next) => {
-    if (req.method === 'GET' && !req.path.startsWith('/api')) {
+    if (req.method === 'GET' && !req.path.startsWith('/api') && !req.path.startsWith('/assets')) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
       return res.sendFile(path.join(distPath, 'index.html'));
     }
     next();
